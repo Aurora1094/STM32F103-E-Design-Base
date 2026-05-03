@@ -1,0 +1,26 @@
+# Keil build output
+Objects/
+Listings/
+*.o
+*.d
+*.crf
+*.htm
+*.axf
+*.hex
+*.bin
+*.map
+*.lst
+*.dep
+*.iex
+*.lnp
+
+# Backup / temp files
+*.bak
+*.tmp
+*.orig
+*.swp
+~$*
+
+# Windows
+Thumbs.db
+desktop.ini
