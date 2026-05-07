@@ -1,58 +1,84 @@
-# STM32F103C8T6 最小系统测试工程代码
+# STM32F103C8T6 波形信号发生器测试代码
 
-这套文件用于 Keil5 + STM32 标准外设库工程，主控为 STM32F103C8T6，不使用 HAL。
+这套源码按当前原理图整理，用于 STM32F103C8T6 工程。底层只依赖 CMSIS 设备头文件 `stm32f1xx.h`，不再依赖 `stm32f10x.h` 或 STM32F10x 标准外设库。当前代码主要用于焊板后的联调：PWM 输出、频率输入测量、ADC 前端电压换算、按键调参，并且 OLED/TFT 双屏同步显示。
 
-## 文件作用
+## 已实现功能
 
-- `main.c`：程序入口，调用应用初始化和主循环。
-- `app.c` / `app.h`：应用层逻辑，负责按键计数、ADC 采样和 OLED 内容刷新。
-- `bsp_key.c` / `bsp_key.h`：PB13/PB14/PB15 按键驱动，上拉输入，低电平按下，20ms 消抖，单次按下只返回一次事件。
-- `bsp_adc.c` / `bsp_adc.h`：ADC1_IN3，也就是 PA3 电压采样，按 0~3.3V 换算毫伏值。
-- `oled.c` / `oled.h` / `oledfont.h`：SSD1306 128x64 OLED 驱动，PB10/PB11 软件 I2C，内置 “南开电赛” 16x16 点阵和本例所需 ASCII 点阵。
-- `delay.c` / `delay.h`：基于 SysTick 的阻塞延时，供软件 I2C 和按键消抖使用。
+- `PA2 / TIM2_CH3`：PWM 输出，默认 1 kHz、50% 占空比。
+- `PA6 / TIM3_CH1`：比较器输出频率测量，输入捕获方式，界面显示 Hz。
+- `PA3 / ADC1_IN3`：ADC 采样，同时按原理图 `Uadc=(5-Vin)/2` 换算 `Vin`。
+- `PB13/PB14/PB15`：三颗独立按键，低电平按下。
+- `PB4/PB3/PB9`：五向开关预留按键，低电平按下；初始化时关闭 JTAG、保留 SWD。
+- `PB10/PB11`：SSD1306 OLED 软件 I2C。
+- `PA5/PA7 + PB5/PB6/PB7/PB8`：ST7735 1.8 寸 TFT SPI 屏。
 
-## 接线说明
+## 界面和按键
 
-| 模块 | 信号 | STM32F103C8T6 引脚 | 说明 |
-| --- | --- | --- | --- |
-| OLED SSD1306 | SCL | PB10 | 软件 I2C 时钟 |
-| OLED SSD1306 | SDA | PB11 | 软件 I2C 数据 |
-| OLED SSD1306 | VCC | 3.3V | 建议使用 3.3V 供电 |
-| OLED SSD1306 | GND | GND | 共地 |
-| KEY1 | GPIO | PB13 | 按键另一端接 GND，内部上拉，按下为低 |
-| KEY2 | GPIO | PB14 | 按键另一端接 GND，内部上拉，按下为低 |
-| KEY3 | GPIO | PB15 | 按键另一端接 GND，内部上拉，按下为低 |
-| ADC 输入 | ADC1_IN3 | PA3 | 采集 0~3.3V 直流电压，禁止超过 VDD |
+OLED 和 TFT 显示同一组信息：
 
-如果 OLED 模块本身没有 I2C 上拉电阻，建议在 SCL、SDA 上外接 4.7kΩ 上拉到 3.3V。
+- `WAVE GEN`
+- `SEL FREQ` / `SEL DUTY`
+- `PWM xxxxHZ`
+- `DUTY xxx%`
+- `FIN xxxxHZ`
+- `ADC x.xxV`
+- `VIN x.xxV`
+- `K1SEL K2+ K3-`
 
-## OLED 显示布局
+按键逻辑：
 
-- 第 1 行：南开电赛
-- 第 2 行：`KEY1: 计数`
-- 第 3 行：`KEY2: 计数`
-- 第 4 行：`KEY3: 计数`
-- 第 5 行：`ADC: x.xxV`
+- `KEY1(PB13)` 或 `KEYA(PB4)`：切换调节项，频率/占空比。
+- `KEY2(PB14)` 或 `KEYB(PB3)`：增加当前调节项。
+- `KEY3(PB15)` 或 `KEYD(PB9)`：减少当前调节项。
 
-## Keil5 标准库工程使用说明
+PWM 频率范围为 1 Hz 到 200 kHz。占空比步进为 5%。
 
-1. 新建或打开 STM32F103C8T6 标准外设库工程。
-2. 将本目录下的 `.c` 文件加入 Keil 工程的用户代码分组。
-3. 将本目录加入 Include Paths。
-4. 工程中需要已有 CMSIS 和 STM32F10x 标准外设库，并确保加入这些标准库源文件：
-   - `stm32f10x_gpio.c`
-   - `stm32f10x_rcc.c`
-   - `stm32f10x_adc.c`
-   - `system_stm32f10x.c`
-5. 工程宏定义建议包含：
-   - `USE_STDPERIPH_DRIVER`
-   - `STM32F10X_MD`
-6. 使用中密度启动文件：
-   - `startup_stm32f10x_md.s`
+## Keil 工程需要加入的用户源码
 
-## 预留接口
+- `main.c`
+- `app.c`
+- `delay.c`
+- `bsp_adc.c`
+- `bsp_key.c`
+- `bsp_gpio.h`
+- `bsp_pwm.c`
+- `bsp_freq.c`
+- `oled.c`
+- `tft.c`
 
-- `PA2`：预留为 `PWM_OUT`，当前代码未初始化，后续可用 TIM2_CH3 或其他方案实现 PWM 输出。
-- `PA6`：预留为 `FREQ_IN`，当前代码未初始化，后续可用 TIM3_CH1 输入捕获或计数模式实现频率测量。
+头文件目录加入本目录即可。
 
-这两个引脚目前不要接入会影响启动或下载的外设，后续扩展时再在对应 BSP 模块中初始化。
+## include 要求
+
+CubeIDE/CubeMX 工程一般已经具备这些 include path：
+
+- `Core/Inc`
+- `Drivers/CMSIS/Include`
+- `Drivers/CMSIS/Device/ST/STM32F1xx/Include`
+
+需要能 include 到：
+
+- `stm32f1xx.h`
+- `core_cm3.h`
+- `system_stm32f1xx.c`
+- 对应芯片启动文件，例如 `startup_stm32f103xb.s`
+
+工程宏定义需要包含你的具体芯片型号。STM32F103C8T6 通常使用：
+
+- `STM32F103xB`
+
+如果你的工程是 CubeMX 生成的，这些通常已经配置好了。
+
+## Cube 工程注意事项
+
+本代码的微秒延时使用 Cortex-M3 的 DWT 计数器，不会占用 SysTick。
+
+`bsp_freq.c` 里提供了弱定义的 `TIM3_IRQHandler`。如果你的 `Core/Src/stm32f1xx_it.c` 里已经有 `TIM3_IRQHandler`，请在那个函数里调用：
+
+```c
+BSP_Freq_TIM3_IRQHandler();
+```
+
+## 上板测试建议
+
+先不接外部模拟输入时，确认双屏能亮、PA2 有默认 1 kHz PWM。再把 PA2 的 PWM 临时跳到 PA6 的频率输入，界面上的 `FIN` 应接近 PWM 设置值。模拟前端调试时，`ADC` 是 PA3 实测电压，`VIN` 是按 `5V - 2*ADC` 换算出来的原输入电压。

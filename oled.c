@@ -1,20 +1,20 @@
 #include "oled.h"
 
+#include "bsp_gpio.h"
 #include "delay.h"
 #include "oledfont.h"
-#include "stm32f10x_gpio.h"
-#include "stm32f10x_rcc.h"
 
 #define OLED_I2C_GPIO_PORT      GPIOB
-#define OLED_I2C_GPIO_RCC       RCC_APB2Periph_GPIOB
-#define OLED_I2C_SCL_PIN        GPIO_Pin_10
-#define OLED_I2C_SDA_PIN        GPIO_Pin_11
+#define OLED_I2C_SCL_PIN        10U
+#define OLED_I2C_SDA_PIN        11U
+#define OLED_I2C_SCL_MASK       (1U << OLED_I2C_SCL_PIN)
+#define OLED_I2C_SDA_MASK       (1U << OLED_I2C_SDA_PIN)
 #define OLED_I2C_ADDR           0x78U
 
-#define OLED_SCL_HIGH()         GPIO_SetBits(OLED_I2C_GPIO_PORT, OLED_I2C_SCL_PIN)
-#define OLED_SCL_LOW()          GPIO_ResetBits(OLED_I2C_GPIO_PORT, OLED_I2C_SCL_PIN)
-#define OLED_SDA_HIGH()         GPIO_SetBits(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_PIN)
-#define OLED_SDA_LOW()          GPIO_ResetBits(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_PIN)
+#define OLED_SCL_HIGH()         BSP_GPIO_Set(OLED_I2C_GPIO_PORT, OLED_I2C_SCL_MASK)
+#define OLED_SCL_LOW()          BSP_GPIO_Reset(OLED_I2C_GPIO_PORT, OLED_I2C_SCL_MASK)
+#define OLED_SDA_HIGH()         BSP_GPIO_Set(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_MASK)
+#define OLED_SDA_LOW()          BSP_GPIO_Reset(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_MASK)
 
 static void OLED_I2C_Delay(void)
 {
@@ -50,7 +50,7 @@ static void OLED_I2C_WaitAck(void)
     OLED_SCL_HIGH();
     OLED_I2C_Delay();
 
-    while (GPIO_ReadInputDataBit(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_PIN) == Bit_SET) {
+    while (BSP_GPIO_Read(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_MASK) != 0U) {
         timeout++;
         if (timeout > 250U) {
             break;
@@ -148,14 +148,10 @@ static const uint8_t *OLED_FindAsciiData(char ch)
 
 void OLED_Init(void)
 {
-    GPIO_InitTypeDef gpio;
+    RCC->APB2ENR |= RCC_APB2ENR_IOPBEN;
 
-    RCC_APB2PeriphClockCmd(OLED_I2C_GPIO_RCC, ENABLE);
-
-    gpio.GPIO_Pin = OLED_I2C_SCL_PIN | OLED_I2C_SDA_PIN;
-    gpio.GPIO_Mode = GPIO_Mode_Out_OD;
-    gpio.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_Init(OLED_I2C_GPIO_PORT, &gpio);
+    BSP_GPIO_ConfigPin(OLED_I2C_GPIO_PORT, OLED_I2C_SCL_PIN, BSP_GPIO_OUTPUT_OD_50MHZ);
+    BSP_GPIO_ConfigPin(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_PIN, BSP_GPIO_OUTPUT_OD_50MHZ);
 
     OLED_SCL_HIGH();
     OLED_SDA_HIGH();

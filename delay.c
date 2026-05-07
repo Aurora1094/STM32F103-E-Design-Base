@@ -1,50 +1,32 @@
 #include "delay.h"
 
-static uint8_t s_ticks_per_us = 0;
+static uint32_t s_ticks_per_us = 0UL;
 
 void Delay_Init(void)
 {
-    SysTick->CTRL = 0x00000000UL;
-    SysTick->LOAD = 0x00000000UL;
-    SysTick->VAL = 0x00000000UL;
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0UL;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
-    s_ticks_per_us = (uint8_t)(SystemCoreClock / 8000000UL);
-    if (s_ticks_per_us == 0U) {
-        s_ticks_per_us = 1U;
+    s_ticks_per_us = SystemCoreClock / 1000000UL;
+    if (s_ticks_per_us == 0UL) {
+        s_ticks_per_us = 1UL;
     }
 }
 
 void Delay_us(uint32_t us)
 {
-    uint32_t ticks;
-    uint32_t load_ticks;
-    uint32_t ctrl;
+    uint32_t start_tick;
+    uint32_t wait_ticks;
 
-    if (s_ticks_per_us == 0U) {
+    if (s_ticks_per_us == 0UL) {
         Delay_Init();
     }
 
-    ticks = us * (uint32_t)s_ticks_per_us;
+    start_tick = DWT->CYCCNT;
+    wait_ticks = us * s_ticks_per_us;
 
-    while (ticks > 0UL) {
-        if (ticks > 0x00FFFFFFUL) {
-            load_ticks = 0x00FFFFFFUL;
-        } else {
-            load_ticks = ticks;
-        }
-
-        SysTick->LOAD = load_ticks;
-        SysTick->VAL = 0x00000000UL;
-        SysTick->CTRL = 0x00000001UL;
-
-        do {
-            ctrl = SysTick->CTRL;
-        } while (((ctrl & 0x00000001UL) != 0UL) && ((ctrl & 0x00010000UL) == 0UL));
-
-        SysTick->CTRL = 0x00000000UL;
-        SysTick->VAL = 0x00000000UL;
-
-        ticks -= load_ticks;
+    while ((DWT->CYCCNT - start_tick) < wait_ticks) {
     }
 }
 
@@ -55,4 +37,3 @@ void Delay_ms(uint32_t ms)
         ms--;
     }
 }
-
