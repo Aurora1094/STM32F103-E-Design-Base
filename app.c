@@ -144,9 +144,11 @@ static void APP_HandleKeys(uint8_t key_event)
 static void APP_ShowRuntimeInfo(void)
 {
     char line[24];
+#if !APP_SAFE_DISPLAY_ONLY
     uint16_t adc_mv;
     uint16_t input_mv;
     uint32_t freq_hz;
+#endif
     uint16_t duty_percent;
 
     APP_DisplayLine(0U, "WAVE GEN");
@@ -164,6 +166,11 @@ static void APP_ShowRuntimeInfo(void)
     sprintf(line, "DUTY %03u%%", (unsigned int)duty_percent);
     APP_DisplayLine(3U, line);
 
+#if APP_SAFE_DISPLAY_ONLY
+    APP_DisplayLine(4U, "FIN ----HZ");
+    APP_DisplayLine(5U, "ADC --.--V");
+    APP_DisplayLine(6U, "VIN --.--V");
+#else
     BSP_Freq_Task();
     freq_hz = BSP_Freq_GetHz();
     sprintf(line, "FIN %luHZ", (unsigned long)freq_hz);
@@ -177,6 +184,7 @@ static void APP_ShowRuntimeInfo(void)
 
     APP_FormatVoltage(line, "VIN", input_mv);
     APP_DisplayLine(6U, line);
+#endif
 
     APP_DisplayLine(7U, "K1SEL K2+ K3-");
 }
@@ -191,8 +199,13 @@ void APP_Init(void)
 #endif
 
     OLED_Clear();
+    OLED_EntireDisplayOn(1U);
+    Delay_ms(300);
+    OLED_EntireDisplayOn(0U);
+    OLED_Clear();
     OLED_ShowString(0U, 0U, "OLED OK");
 
+#if !APP_SAFE_DISPLAY_ONLY
     OLED_ShowString(0U, 1U, "KEY INIT");
     BSP_Key_Init();
     OLED_ShowString(0U, 2U, "ADC INIT");
@@ -201,6 +214,7 @@ void APP_Init(void)
     BSP_PWM_Init();
     OLED_ShowString(0U, 4U, "FREQ INIT");
     BSP_Freq_Init();
+#endif
 
 #if APP_USE_TFT
     TFT_Init();
@@ -212,6 +226,9 @@ void APP_Init(void)
 
 void APP_Task(void)
 {
+#if APP_SAFE_DISPLAY_ONLY
+    Delay_ms(500);
+#else
     static uint8_t refresh_count = 0U;
     uint8_t key_event;
     uint8_t need_refresh;
@@ -237,6 +254,7 @@ void APP_Task(void)
     }
 
     Delay_ms(10);
+#endif
 }
 
 void APP_Run(void)
