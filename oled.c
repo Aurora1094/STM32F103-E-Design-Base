@@ -9,12 +9,15 @@
 #define OLED_I2C_SDA_PIN        11U
 #define OLED_I2C_SCL_MASK       (1U << OLED_I2C_SCL_PIN)
 #define OLED_I2C_SDA_MASK       (1U << OLED_I2C_SDA_PIN)
-#define OLED_I2C_ADDR           0x78U
+#define OLED_I2C_ADDR_3C        0x78U
+#define OLED_I2C_ADDR_3D        0x7AU
 
 #define OLED_SCL_HIGH()         BSP_GPIO_Set(OLED_I2C_GPIO_PORT, OLED_I2C_SCL_MASK)
 #define OLED_SCL_LOW()          BSP_GPIO_Reset(OLED_I2C_GPIO_PORT, OLED_I2C_SCL_MASK)
 #define OLED_SDA_HIGH()         BSP_GPIO_Set(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_MASK)
 #define OLED_SDA_LOW()          BSP_GPIO_Reset(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_MASK)
+
+static uint8_t s_oled_i2c_addr = OLED_I2C_ADDR_3C;
 
 static void OLED_I2C_Delay(void)
 {
@@ -40,9 +43,10 @@ static void OLED_I2C_Stop(void)
     OLED_I2C_Delay();
 }
 
-static void OLED_I2C_WaitAck(void)
+static uint8_t OLED_I2C_WaitAck(void)
 {
     uint8_t timeout;
+    uint8_t ack;
 
     timeout = 0;
     OLED_SDA_HIGH();
@@ -55,13 +59,17 @@ static void OLED_I2C_WaitAck(void)
         if (timeout > 250U) {
             break;
         }
+        OLED_I2C_Delay();
     }
 
+    ack = (BSP_GPIO_Read(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_MASK) == 0U) ? 1U : 0U;
     OLED_SCL_LOW();
     OLED_I2C_Delay();
+
+    return ack;
 }
 
-static void OLED_I2C_SendByte(uint8_t byte)
+static uint8_t OLED_I2C_SendByte(uint8_t byte)
 {
     uint8_t i;
 
@@ -79,13 +87,24 @@ static void OLED_I2C_SendByte(uint8_t byte)
         byte <<= 1;
     }
 
-    OLED_I2C_WaitAck();
+    return OLED_I2C_WaitAck();
+}
+
+static uint8_t OLED_I2C_CheckAddress(uint8_t address)
+{
+    uint8_t ack;
+
+    OLED_I2C_Start();
+    ack = OLED_I2C_SendByte(address);
+    OLED_I2C_Stop();
+
+    return ack;
 }
 
 static void OLED_WriteByte(uint8_t byte, uint8_t control)
 {
     OLED_I2C_Start();
-    OLED_I2C_SendByte(OLED_I2C_ADDR);
+    OLED_I2C_SendByte(s_oled_i2c_addr);
     OLED_I2C_SendByte(control);
     OLED_I2C_SendByte(byte);
     OLED_I2C_Stop();
@@ -101,7 +120,7 @@ static void OLED_WriteDataStream(const uint8_t *data, uint16_t length)
     uint16_t i;
 
     OLED_I2C_Start();
-    OLED_I2C_SendByte(OLED_I2C_ADDR);
+    OLED_I2C_SendByte(s_oled_i2c_addr);
     OLED_I2C_SendByte(0x40U);
 
     for (i = 0; i < length; i++) {
@@ -116,7 +135,7 @@ static void OLED_WriteRepeatData(uint8_t data, uint16_t length)
     uint16_t i;
 
     OLED_I2C_Start();
-    OLED_I2C_SendByte(OLED_I2C_ADDR);
+    OLED_I2C_SendByte(s_oled_i2c_addr);
     OLED_I2C_SendByte(0x40U);
 
     for (i = 0; i < length; i++) {
@@ -157,6 +176,14 @@ void OLED_Init(void)
     OLED_SDA_HIGH();
 
     Delay_ms(100);
+
+    if (OLED_I2C_CheckAddress(OLED_I2C_ADDR_3C) != 0U) {
+        s_oled_i2c_addr = OLED_I2C_ADDR_3C;
+    } else if (OLED_I2C_CheckAddress(OLED_I2C_ADDR_3D) != 0U) {
+        s_oled_i2c_addr = OLED_I2C_ADDR_3D;
+    } else {
+        s_oled_i2c_addr = OLED_I2C_ADDR_3C;
+    }
 
     OLED_WriteCommand(0xAE);
     OLED_WriteCommand(0x20);

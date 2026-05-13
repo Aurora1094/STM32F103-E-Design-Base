@@ -8,7 +8,9 @@
 #include "bsp_pwm.h"
 #include "delay.h"
 #include "oled.h"
+#if APP_USE_TFT
 #include "tft.h"
+#endif
 
 #define APP_SELECT_FREQ        0U
 #define APP_SELECT_DUTY        1U
@@ -21,14 +23,18 @@ static uint16_t s_pwm_duty_permille = BSP_PWM_DEFAULT_DUTY;
 
 static void APP_DisplayLine(uint8_t line, const char *text)
 {
+#if APP_USE_TFT
     uint16_t tft_y;
+#endif
 
     OLED_ClearLine(line);
     OLED_ShowString(0U, line, text);
 
+#if APP_USE_TFT
     TFT_ClearLine(line);
     tft_y = (uint16_t)((uint16_t)line * 16U + APP_TFT_TEXT_Y_OFFSET);
     TFT_ShowString(0U, tft_y, text, TFT_WHITE, TFT_BLACK, 1U);
+#endif
 }
 
 static uint32_t APP_GetFrequencyStep(void)
@@ -158,15 +164,21 @@ static void APP_ShowRuntimeInfo(void)
 void APP_Init(void)
 {
     Delay_Init();
+    OLED_Init();
+    OLED_Clear();
+    OLED_ShowString(0U, 0U, "OLED OK");
+    Delay_ms(200);
+
     BSP_Key_Init();
     BSP_ADC_Init();
     BSP_PWM_Init();
     BSP_Freq_Init();
-    OLED_Init();
-    TFT_Init();
 
-    OLED_Clear();
+#if APP_USE_TFT
+    TFT_Init();
     TFT_Clear();
+#endif
+
     APP_ShowRuntimeInfo();
 }
 
