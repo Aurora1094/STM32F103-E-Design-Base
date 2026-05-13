@@ -25,6 +25,10 @@ static uint16_t s_pwm_duty_permille = BSP_PWM_DEFAULT_DUTY;
 static void APP_RunOledSelfTest(void)
 {
     while (1) {
+        OLED_EntireDisplayOn(1U);
+        Delay_ms(500);
+
+        OLED_EntireDisplayOn(0U);
         OLED_Fill(0xFF);
         Delay_ms(500);
 
