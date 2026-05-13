@@ -4,20 +4,41 @@
 #include "delay.h"
 #include "oledfont.h"
 
-#define OLED_I2C_GPIO_PORT      GPIOB
-#define OLED_I2C_SCL_PIN        10U
-#define OLED_I2C_SDA_PIN        11U
-#define OLED_I2C_SCL_MASK       (1U << OLED_I2C_SCL_PIN)
-#define OLED_I2C_SDA_MASK       (1U << OLED_I2C_SDA_PIN)
+#define OLED_I2C_GPIO_PORT          GPIOB
+#define OLED_I2C_DEFAULT_SCL_PIN    10U
+#define OLED_I2C_DEFAULT_SDA_PIN    11U
 #define OLED_I2C_ADDR_3C        0x78U
 #define OLED_I2C_ADDR_3D        0x7AU
 
-#define OLED_SCL_HIGH()         BSP_GPIO_Set(OLED_I2C_GPIO_PORT, OLED_I2C_SCL_MASK)
-#define OLED_SCL_LOW()          BSP_GPIO_Reset(OLED_I2C_GPIO_PORT, OLED_I2C_SCL_MASK)
-#define OLED_SDA_HIGH()         BSP_GPIO_Set(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_MASK)
-#define OLED_SDA_LOW()          BSP_GPIO_Reset(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_MASK)
+#define OLED_SCL_HIGH()         BSP_GPIO_Set(s_oled_i2c_port, s_oled_i2c_scl_mask)
+#define OLED_SCL_LOW()          BSP_GPIO_Reset(s_oled_i2c_port, s_oled_i2c_scl_mask)
+#define OLED_SDA_HIGH()         BSP_GPIO_Set(s_oled_i2c_port, s_oled_i2c_sda_mask)
+#define OLED_SDA_LOW()          BSP_GPIO_Reset(s_oled_i2c_port, s_oled_i2c_sda_mask)
 
 static uint8_t s_oled_i2c_addr = OLED_I2C_ADDR_3C;
+static GPIO_TypeDef *s_oled_i2c_port = OLED_I2C_GPIO_PORT;
+static uint8_t s_oled_i2c_scl_pin = OLED_I2C_DEFAULT_SCL_PIN;
+static uint8_t s_oled_i2c_sda_pin = OLED_I2C_DEFAULT_SDA_PIN;
+static uint16_t s_oled_i2c_scl_mask = (uint16_t)(1U << OLED_I2C_DEFAULT_SCL_PIN);
+static uint16_t s_oled_i2c_sda_mask = (uint16_t)(1U << OLED_I2C_DEFAULT_SDA_PIN);
+
+static void OLED_I2C_SelectPins(uint8_t scl_pin, uint8_t sda_pin)
+{
+    s_oled_i2c_port = OLED_I2C_GPIO_PORT;
+    s_oled_i2c_scl_pin = scl_pin;
+    s_oled_i2c_sda_pin = sda_pin;
+    s_oled_i2c_scl_mask = (uint16_t)(1U << scl_pin);
+    s_oled_i2c_sda_mask = (uint16_t)(1U << sda_pin);
+}
+
+static void OLED_I2C_ConfigPins(void)
+{
+    BSP_GPIO_ConfigPin(s_oled_i2c_port, s_oled_i2c_scl_pin, BSP_GPIO_OUTPUT_OD_50MHZ);
+    BSP_GPIO_ConfigPin(s_oled_i2c_port, s_oled_i2c_sda_pin, BSP_GPIO_OUTPUT_OD_50MHZ);
+
+    OLED_SCL_HIGH();
+    OLED_SDA_HIGH();
+}
 
 static void OLED_I2C_Delay(void)
 {
@@ -54,7 +75,7 @@ static uint8_t OLED_I2C_WaitAck(void)
     OLED_SCL_HIGH();
     OLED_I2C_Delay();
 
-    while (BSP_GPIO_Read(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_MASK) != 0U) {
+    while (BSP_GPIO_Read(s_oled_i2c_port, s_oled_i2c_sda_mask) != 0U) {
         timeout++;
         if (timeout > 250U) {
             break;
@@ -62,7 +83,7 @@ static uint8_t OLED_I2C_WaitAck(void)
         OLED_I2C_Delay();
     }
 
-    ack = (BSP_GPIO_Read(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_MASK) == 0U) ? 1U : 0U;
+    ack = (BSP_GPIO_Read(s_oled_i2c_port, s_oled_i2c_sda_mask) == 0U) ? 1U : 0U;
     OLED_SCL_LOW();
     OLED_I2C_Delay();
 
@@ -99,6 +120,36 @@ static uint8_t OLED_I2C_CheckAddress(uint8_t address)
     OLED_I2C_Stop();
 
     return ack;
+}
+
+static uint8_t OLED_I2C_DetectBus(void)
+{
+    static const uint8_t pin_pairs[][2] = {
+        {OLED_I2C_DEFAULT_SCL_PIN, OLED_I2C_DEFAULT_SDA_PIN},
+        {6U, 7U}
+    };
+    uint8_t i;
+
+    for (i = 0U; i < (sizeof(pin_pairs) / sizeof(pin_pairs[0])); i++) {
+        OLED_I2C_SelectPins(pin_pairs[i][0], pin_pairs[i][1]);
+        OLED_I2C_ConfigPins();
+        Delay_ms(5);
+
+        if (OLED_I2C_CheckAddress(OLED_I2C_ADDR_3C) != 0U) {
+            s_oled_i2c_addr = OLED_I2C_ADDR_3C;
+            return 1U;
+        }
+
+        if (OLED_I2C_CheckAddress(OLED_I2C_ADDR_3D) != 0U) {
+            s_oled_i2c_addr = OLED_I2C_ADDR_3D;
+            return 1U;
+        }
+    }
+
+    OLED_I2C_SelectPins(OLED_I2C_DEFAULT_SCL_PIN, OLED_I2C_DEFAULT_SDA_PIN);
+    OLED_I2C_ConfigPins();
+    s_oled_i2c_addr = OLED_I2C_ADDR_3C;
+    return 0U;
 }
 
 static void OLED_WriteByte(uint8_t byte, uint8_t control)
@@ -169,21 +220,8 @@ void OLED_Init(void)
 {
     RCC->APB2ENR |= RCC_APB2ENR_IOPBEN;
 
-    BSP_GPIO_ConfigPin(OLED_I2C_GPIO_PORT, OLED_I2C_SCL_PIN, BSP_GPIO_OUTPUT_OD_50MHZ);
-    BSP_GPIO_ConfigPin(OLED_I2C_GPIO_PORT, OLED_I2C_SDA_PIN, BSP_GPIO_OUTPUT_OD_50MHZ);
-
-    OLED_SCL_HIGH();
-    OLED_SDA_HIGH();
-
     Delay_ms(100);
-
-    if (OLED_I2C_CheckAddress(OLED_I2C_ADDR_3C) != 0U) {
-        s_oled_i2c_addr = OLED_I2C_ADDR_3C;
-    } else if (OLED_I2C_CheckAddress(OLED_I2C_ADDR_3D) != 0U) {
-        s_oled_i2c_addr = OLED_I2C_ADDR_3D;
-    } else {
-        s_oled_i2c_addr = OLED_I2C_ADDR_3C;
-    }
+    (void)OLED_I2C_DetectBus();
 
     OLED_WriteCommand(0xAE);
     OLED_WriteCommand(0x20);
@@ -215,11 +253,16 @@ void OLED_Init(void)
 
 void OLED_Clear(void)
 {
+    OLED_Fill(0x00);
+}
+
+void OLED_Fill(uint8_t data)
+{
     uint8_t page;
 
     for (page = 0; page < 8U; page++) {
         OLED_SetPos(0, page);
-        OLED_WriteRepeatData(0x00, OLED_WIDTH);
+        OLED_WriteRepeatData(data, OLED_WIDTH);
     }
 }
 

@@ -21,6 +21,22 @@ static uint8_t s_selected_item = APP_SELECT_FREQ;
 static uint32_t s_pwm_freq_hz = BSP_PWM_DEFAULT_FREQ_HZ;
 static uint16_t s_pwm_duty_permille = BSP_PWM_DEFAULT_DUTY;
 
+#if APP_OLED_SELF_TEST
+static void APP_RunOledSelfTest(void)
+{
+    while (1) {
+        OLED_Fill(0xFF);
+        Delay_ms(500);
+
+        OLED_Clear();
+        OLED_ShowString(0U, 0U, "OLED TEST");
+        OLED_ShowString(0U, 2U, "PB10/11");
+        OLED_ShowString(0U, 3U, "OR PB6/7");
+        Delay_ms(1000);
+    }
+}
+#endif
+
 static void APP_DisplayLine(uint8_t line, const char *text)
 {
 #if APP_USE_TFT
@@ -165,9 +181,12 @@ void APP_Init(void)
 {
     Delay_Init();
     OLED_Init();
+
+#if APP_OLED_SELF_TEST
+    APP_RunOledSelfTest();
+#endif
+
     OLED_Clear();
-    OLED_ShowString(0U, 0U, "OLED OK");
-    Delay_ms(200);
 
     BSP_Key_Init();
     BSP_ADC_Init();
