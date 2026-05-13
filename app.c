@@ -34,8 +34,8 @@ static void APP_RunOledSelfTest(void)
 
         OLED_Clear();
         OLED_ShowString(0U, 0U, "OLED TEST");
-        OLED_ShowString(0U, 2U, "PB10/11");
-        OLED_ShowString(0U, 3U, "OR PB6/7");
+        OLED_ShowString(0U, 2U, "PB10 SCL");
+        OLED_ShowString(0U, 3U, "PB11 SDA");
         Delay_ms(1000);
     }
 }
@@ -191,10 +191,15 @@ void APP_Init(void)
 #endif
 
     OLED_Clear();
+    OLED_ShowString(0U, 0U, "OLED OK");
 
+    OLED_ShowString(0U, 1U, "KEY INIT");
     BSP_Key_Init();
+    OLED_ShowString(0U, 2U, "ADC INIT");
     BSP_ADC_Init();
+    OLED_ShowString(0U, 3U, "PWM INIT");
     BSP_PWM_Init();
+    OLED_ShowString(0U, 4U, "FREQ INIT");
     BSP_Freq_Init();
 
 #if APP_USE_TFT

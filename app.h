@@ -8,7 +8,7 @@
 #endif
 
 #ifndef APP_OLED_SELF_TEST
-#define APP_OLED_SELF_TEST 1U
+#define APP_OLED_SELF_TEST 0U
 #endif
 
 void APP_Init(void);
