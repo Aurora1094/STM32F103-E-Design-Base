@@ -227,7 +227,12 @@ void APP_Init(void)
 void APP_Task(void)
 {
 #if APP_SAFE_DISPLAY_ONLY
-    Delay_ms(500);
+    OLED_EntireDisplayOn(1U);
+    Delay_ms(120);
+    OLED_EntireDisplayOn(0U);
+    OLED_Clear();
+    APP_ShowRuntimeInfo();
+    Delay_ms(1000);
 #else
     static uint8_t refresh_count = 0U;
     uint8_t key_event;
