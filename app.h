@@ -12,7 +12,7 @@
 #endif
 
 #ifndef APP_SAFE_DISPLAY_ONLY
-#define APP_SAFE_DISPLAY_ONLY 1U
+#define APP_SAFE_DISPLAY_ONLY 0U
 #endif
 
 void APP_Init(void);
