@@ -4,6 +4,7 @@
 
 #include "bsp_adc.h"
 #include "bsp_freq.h"
+#include "bsp_gpio.h"
 #include "bsp_key.h"
 #include "bsp_pwm.h"
 #include "delay.h"
@@ -13,29 +14,73 @@
 #endif
 
 #define APP_SELECT_FREQ        0U
-#define APP_SELECT_DUTY        1U
-#define APP_PWM_DUTY_STEP      50U
+#define APP_SELECT_VPP         1U
+#define APP_PWM_MIN_FREQ_HZ    100UL
+#define APP_PWM_MAX_FREQ_HZ    1000UL
+#define APP_PWM_FREQ_STEP_HZ   100UL
+#define APP_PWM_DUTY_FIXED     500U
+#define APP_VPP_MIN_V          1U
+#define APP_VPP_MAX_V          10U
+#define APP_VPP_STEP_V         1U
+#define APP_ADC_SAMPLE_COUNT   80U
 #define APP_TFT_TEXT_Y_OFFSET  4U
+#define APP_LED_GPIO_PORT      GPIOC
+#define APP_LED1_PIN           14U
+#define APP_LED2_PIN           15U
+#define APP_LED1_MASK          (1U << APP_LED1_PIN)
+#define APP_LED2_MASK          (1U << APP_LED2_PIN)
 
 static uint8_t s_selected_item = APP_SELECT_FREQ;
 static uint32_t s_pwm_freq_hz = BSP_PWM_DEFAULT_FREQ_HZ;
-static uint16_t s_pwm_duty_permille = BSP_PWM_DEFAULT_DUTY;
+static uint16_t s_pwm_duty_permille = APP_PWM_DUTY_FIXED;
+static uint8_t s_target_vpp_v = 3U;
+static uint16_t s_key_press_count = 0U;
+static uint16_t s_adc_mv = 0U;
+static uint16_t s_measured_vpp_mv = 0U;
 
 #if APP_OLED_SELF_TEST
+static void APP_DiagLedInit(void)
+{
+    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
+    BSP_GPIO_ConfigPin(APP_LED_GPIO_PORT, APP_LED1_PIN, BSP_GPIO_OUTPUT_PP_50MHZ);
+    BSP_GPIO_ConfigPin(APP_LED_GPIO_PORT, APP_LED2_PIN, BSP_GPIO_OUTPUT_PP_50MHZ);
+    BSP_GPIO_Set(APP_LED_GPIO_PORT, APP_LED1_MASK | APP_LED2_MASK);
+}
+
+static void APP_DiagLedSet(uint8_t led1_on, uint8_t led2_on)
+{
+    if (led1_on != 0U) {
+        BSP_GPIO_Reset(APP_LED_GPIO_PORT, APP_LED1_MASK);
+    } else {
+        BSP_GPIO_Set(APP_LED_GPIO_PORT, APP_LED1_MASK);
+    }
+
+    if (led2_on != 0U) {
+        BSP_GPIO_Reset(APP_LED_GPIO_PORT, APP_LED2_MASK);
+    } else {
+        BSP_GPIO_Set(APP_LED_GPIO_PORT, APP_LED2_MASK);
+    }
+}
+
 static void APP_RunOledSelfTest(void)
 {
+    APP_DiagLedInit();
+
     while (1) {
+        APP_DiagLedSet(1U, 0U);
         OLED_EntireDisplayOn(1U);
         Delay_ms(500);
 
+        APP_DiagLedSet(0U, 1U);
         OLED_EntireDisplayOn(0U);
         OLED_Fill(0xFF);
         Delay_ms(500);
 
+        APP_DiagLedSet(1U, 1U);
         OLED_Clear();
         OLED_ShowString(0U, 0U, "OLED TEST");
-        OLED_ShowString(0U, 2U, "PB10/11");
-        OLED_ShowString(0U, 3U, "OR PB6/7");
+        OLED_ShowString(0U, 2U, "PB10 SCL");
+        OLED_ShowString(0U, 3U, "PB11 SDA");
         Delay_ms(1000);
     }
 }
@@ -59,15 +104,7 @@ static void APP_DisplayLine(uint8_t line, const char *text)
 
 static uint32_t APP_GetFrequencyStep(void)
 {
-    if (s_pwm_freq_hz < 1000UL) {
-        return 100UL;
-    }
-
-    if (s_pwm_freq_hz < 10000UL) {
-        return 1000UL;
-    }
-
-    return 10000UL;
+    return APP_PWM_FREQ_STEP_HZ;
 }
 
 static void APP_FormatVoltage(char *line, const char *name, uint16_t mv)
@@ -81,6 +118,58 @@ static void APP_FormatVoltage(char *line, const char *name, uint16_t mv)
             (unsigned int)(centivolt % 100U));
 }
 
+static void APP_DrawTitle(void)
+{
+    uint8_t i;
+
+    OLED_ClearLine(0U);
+    OLED_ClearLine(1U);
+    OLED_ShowString(0U, 0U, "WAVE");
+    OLED_ShowString(0U, 1U, "GEN");
+
+    for (i = 0U; i < 4U; i++) {
+        OLED_ShowChinese((uint8_t)(48U + (i * 16U)), 0U, i);
+    }
+}
+
+static void APP_SampleMeasurement(void)
+{
+    uint8_t i;
+    uint16_t adc_mv;
+    int16_t input_mv;
+    int16_t min_mv;
+    int16_t max_mv;
+
+    if (BSP_ADC_IsReady() == 0U) {
+        s_adc_mv = 0U;
+        s_measured_vpp_mv = 0U;
+        return;
+    }
+
+    adc_mv = BSP_ADC_ReadMilliVoltSafe(0U);
+    input_mv = BSP_ADC_ConvertToInputSignedMilliVolt(adc_mv);
+    min_mv = input_mv;
+    max_mv = input_mv;
+
+    for (i = 1U; i < APP_ADC_SAMPLE_COUNT; i++) {
+        adc_mv = BSP_ADC_ReadMilliVoltSafe(adc_mv);
+        input_mv = BSP_ADC_ConvertToInputSignedMilliVolt(adc_mv);
+
+        if (input_mv < min_mv) {
+            min_mv = input_mv;
+        }
+
+        if (input_mv > max_mv) {
+            max_mv = input_mv;
+        }
+
+        Delay_us(150U);
+    }
+
+    s_adc_mv = adc_mv;
+    s_measured_vpp_mv = (uint16_t)(max_mv - min_mv);
+}
+
 static void APP_AdjustSelected(int8_t direction)
 {
     uint32_t freq_step;
@@ -89,14 +178,14 @@ static void APP_AdjustSelected(int8_t direction)
         freq_step = APP_GetFrequencyStep();
 
         if (direction > 0) {
-            if ((BSP_PWM_MAX_FREQ_HZ - s_pwm_freq_hz) < freq_step) {
-                s_pwm_freq_hz = BSP_PWM_MAX_FREQ_HZ;
+            if ((APP_PWM_MAX_FREQ_HZ - s_pwm_freq_hz) < freq_step) {
+                s_pwm_freq_hz = APP_PWM_MAX_FREQ_HZ;
             } else {
                 s_pwm_freq_hz += freq_step;
             }
         } else {
-            if ((s_pwm_freq_hz - BSP_PWM_MIN_FREQ_HZ) < freq_step) {
-                s_pwm_freq_hz = BSP_PWM_MIN_FREQ_HZ;
+            if ((s_pwm_freq_hz - APP_PWM_MIN_FREQ_HZ) < freq_step) {
+                s_pwm_freq_hz = APP_PWM_MIN_FREQ_HZ;
             } else {
                 s_pwm_freq_hz -= freq_step;
             }
@@ -105,28 +194,30 @@ static void APP_AdjustSelected(int8_t direction)
         BSP_PWM_SetFrequency(s_pwm_freq_hz);
     } else {
         if (direction > 0) {
-            if ((1000U - s_pwm_duty_permille) < APP_PWM_DUTY_STEP) {
-                s_pwm_duty_permille = 1000U;
+            if ((APP_VPP_MAX_V - s_target_vpp_v) < APP_VPP_STEP_V) {
+                s_target_vpp_v = APP_VPP_MAX_V;
             } else {
-                s_pwm_duty_permille = (uint16_t)(s_pwm_duty_permille + APP_PWM_DUTY_STEP);
+                s_target_vpp_v = (uint8_t)(s_target_vpp_v + APP_VPP_STEP_V);
             }
         } else {
-            if (s_pwm_duty_permille < APP_PWM_DUTY_STEP) {
-                s_pwm_duty_permille = 0U;
+            if ((s_target_vpp_v - APP_VPP_MIN_V) < APP_VPP_STEP_V) {
+                s_target_vpp_v = APP_VPP_MIN_V;
             } else {
-                s_pwm_duty_permille = (uint16_t)(s_pwm_duty_permille - APP_PWM_DUTY_STEP);
+                s_target_vpp_v = (uint8_t)(s_target_vpp_v - APP_VPP_STEP_V);
             }
         }
-
-        BSP_PWM_SetDutyPermille(s_pwm_duty_permille);
     }
 }
 
 static void APP_HandleKeys(uint8_t key_event)
 {
+    if (key_event != 0U) {
+        s_key_press_count++;
+    }
+
     if ((key_event & (BSP_KEY1_EVENT | BSP_KEYA_EVENT)) != 0U) {
         if (s_selected_item == APP_SELECT_FREQ) {
-            s_selected_item = APP_SELECT_DUTY;
+            s_selected_item = APP_SELECT_VPP;
         } else {
             s_selected_item = APP_SELECT_FREQ;
         }
@@ -144,41 +235,48 @@ static void APP_HandleKeys(uint8_t key_event)
 static void APP_ShowRuntimeInfo(void)
 {
     char line[24];
-    uint16_t adc_mv;
-    uint16_t input_mv;
+#if !APP_SAFE_DISPLAY_ONLY
     uint32_t freq_hz;
+#endif
     uint16_t duty_percent;
 
-    APP_DisplayLine(0U, "WAVE GEN");
+    APP_DrawTitle();
 
     if (s_selected_item == APP_SELECT_FREQ) {
-        APP_DisplayLine(1U, "SEL FREQ");
+        sprintf(line, "SEL F K%03u", (unsigned int)s_key_press_count);
     } else {
-        APP_DisplayLine(1U, "SEL DUTY");
+        sprintf(line, "SEL V K%03u", (unsigned int)s_key_press_count);
     }
-
-    sprintf(line, "PWM %luHZ", (unsigned long)s_pwm_freq_hz);
     APP_DisplayLine(2U, line);
 
-    duty_percent = (uint16_t)((s_pwm_duty_permille + 5U) / 10U);
-    sprintf(line, "DUTY %03u%%", (unsigned int)duty_percent);
+    sprintf(line, "FSET %luHZ", (unsigned long)s_pwm_freq_hz);
     APP_DisplayLine(3U, line);
 
+    duty_percent = (uint16_t)((s_pwm_duty_permille + 5U) / 10U);
+    sprintf(line, "VSET %02uV D%03u%%", (unsigned int)s_target_vpp_v, (unsigned int)duty_percent);
+    APP_DisplayLine(4U, line);
+
+#if APP_SAFE_DISPLAY_ONLY
+    APP_DisplayLine(5U, "FIN ----HZ");
+    APP_DisplayLine(6U, "VPP --.--V");
+#else
+    APP_SampleMeasurement();
     BSP_Freq_Task();
     freq_hz = BSP_Freq_GetHz();
     sprintf(line, "FIN %luHZ", (unsigned long)freq_hz);
-    APP_DisplayLine(4U, line);
-
-    adc_mv = BSP_ADC_ReadMilliVolt();
-    input_mv = BSP_ADC_ConvertToInputMilliVolt(adc_mv);
-
-    APP_FormatVoltage(line, "ADC", adc_mv);
     APP_DisplayLine(5U, line);
 
-    APP_FormatVoltage(line, "VIN", input_mv);
+    APP_FormatVoltage(line, "VPP", s_measured_vpp_mv);
     APP_DisplayLine(6U, line);
 
-    APP_DisplayLine(7U, "K1SEL K2+ K3-");
+    APP_FormatVoltage(line, "ADC", s_adc_mv);
+    APP_DisplayLine(7U, line);
+#endif
+
+#if APP_SAFE_DISPLAY_ONLY
+    sprintf(line, "KEY %03u", (unsigned int)s_key_press_count);
+    APP_DisplayLine(7U, line);
+#endif
 }
 
 void APP_Init(void)
@@ -191,11 +289,24 @@ void APP_Init(void)
 #endif
 
     OLED_Clear();
+    OLED_EntireDisplayOn(1U);
+    Delay_ms(500);
+    OLED_EntireDisplayOn(0U);
+    OLED_Fill(0xFF);
+    Delay_ms(300);
+    OLED_Clear();
+    OLED_ShowString(0U, 0U, "OLED OK");
 
+#if !APP_SAFE_DISPLAY_ONLY
+    OLED_ShowString(0U, 1U, "KEY INIT");
     BSP_Key_Init();
+    OLED_ShowString(0U, 2U, "ADC INIT");
     BSP_ADC_Init();
+    OLED_ShowString(0U, 3U, "PWM INIT");
     BSP_PWM_Init();
+    OLED_ShowString(0U, 4U, "FREQ INIT");
     BSP_Freq_Init();
+#endif
 
 #if APP_USE_TFT
     TFT_Init();
@@ -207,6 +318,14 @@ void APP_Init(void)
 
 void APP_Task(void)
 {
+#if APP_SAFE_DISPLAY_ONLY
+    OLED_EntireDisplayOn(1U);
+    Delay_ms(120);
+    OLED_EntireDisplayOn(0U);
+    OLED_Clear();
+    APP_ShowRuntimeInfo();
+    Delay_ms(1000);
+#else
     static uint8_t refresh_count = 0U;
     uint8_t key_event;
     uint8_t need_refresh;
@@ -232,6 +351,7 @@ void APP_Task(void)
     }
 
     Delay_ms(10);
+#endif
 }
 
 void APP_Run(void)
