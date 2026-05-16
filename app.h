@@ -11,10 +11,6 @@
 #define APP_OLED_SELF_TEST 1U
 #endif
 
-#ifndef APP_SAFE_DISPLAY_ONLY
-#define APP_SAFE_DISPLAY_ONLY 0U
-#endif
-
 void APP_Init(void);
 void APP_Task(void);
 void APP_Run(void);
