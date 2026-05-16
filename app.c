@@ -4,6 +4,7 @@
 
 #include "bsp_adc.h"
 #include "bsp_freq.h"
+#include "bsp_gpio.h"
 #include "bsp_key.h"
 #include "bsp_pwm.h"
 #include "delay.h"
@@ -23,6 +24,11 @@
 #define APP_VPP_STEP_V         1U
 #define APP_ADC_SAMPLE_COUNT   80U
 #define APP_TFT_TEXT_Y_OFFSET  4U
+#define APP_LED_GPIO_PORT      GPIOC
+#define APP_LED1_PIN           14U
+#define APP_LED2_PIN           15U
+#define APP_LED1_MASK          (1U << APP_LED1_PIN)
+#define APP_LED2_MASK          (1U << APP_LED2_PIN)
 
 static uint8_t s_selected_item = APP_SELECT_FREQ;
 static uint32_t s_pwm_freq_hz = BSP_PWM_DEFAULT_FREQ_HZ;
@@ -33,16 +39,44 @@ static uint16_t s_adc_mv = 0U;
 static uint16_t s_measured_vpp_mv = 0U;
 
 #if APP_OLED_SELF_TEST
+static void APP_DiagLedInit(void)
+{
+    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
+    BSP_GPIO_ConfigPin(APP_LED_GPIO_PORT, APP_LED1_PIN, BSP_GPIO_OUTPUT_PP_50MHZ);
+    BSP_GPIO_ConfigPin(APP_LED_GPIO_PORT, APP_LED2_PIN, BSP_GPIO_OUTPUT_PP_50MHZ);
+    BSP_GPIO_Set(APP_LED_GPIO_PORT, APP_LED1_MASK | APP_LED2_MASK);
+}
+
+static void APP_DiagLedSet(uint8_t led1_on, uint8_t led2_on)
+{
+    if (led1_on != 0U) {
+        BSP_GPIO_Reset(APP_LED_GPIO_PORT, APP_LED1_MASK);
+    } else {
+        BSP_GPIO_Set(APP_LED_GPIO_PORT, APP_LED1_MASK);
+    }
+
+    if (led2_on != 0U) {
+        BSP_GPIO_Reset(APP_LED_GPIO_PORT, APP_LED2_MASK);
+    } else {
+        BSP_GPIO_Set(APP_LED_GPIO_PORT, APP_LED2_MASK);
+    }
+}
+
 static void APP_RunOledSelfTest(void)
 {
+    APP_DiagLedInit();
+
     while (1) {
+        APP_DiagLedSet(1U, 0U);
         OLED_EntireDisplayOn(1U);
         Delay_ms(500);
 
+        APP_DiagLedSet(0U, 1U);
         OLED_EntireDisplayOn(0U);
         OLED_Fill(0xFF);
         Delay_ms(500);
 
+        APP_DiagLedSet(1U, 1U);
         OLED_Clear();
         OLED_ShowString(0U, 0U, "OLED TEST");
         OLED_ShowString(0U, 2U, "PB10 SCL");

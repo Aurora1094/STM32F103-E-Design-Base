@@ -8,7 +8,7 @@
 #endif
 
 #ifndef APP_OLED_SELF_TEST
-#define APP_OLED_SELF_TEST 0U
+#define APP_OLED_SELF_TEST 1U
 #endif
 
 #ifndef APP_SAFE_DISPLAY_ONLY
