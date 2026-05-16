@@ -32,26 +32,6 @@ static uint16_t s_key_press_count = 0U;
 static uint16_t s_adc_mv = 0U;
 static uint16_t s_measured_vpp_mv = 0U;
 
-#if APP_OLED_SELF_TEST
-static void APP_RunOledSelfTest(void)
-{
-    while (1) {
-        OLED_EntireDisplayOn(1U);
-        Delay_ms(500);
-
-        OLED_EntireDisplayOn(0U);
-        OLED_Fill(0xFF);
-        Delay_ms(500);
-
-        OLED_Clear();
-        OLED_ShowString(0U, 0U, "OLED TEST");
-        OLED_ShowString(0U, 2U, "PB10 SCL");
-        OLED_ShowString(0U, 3U, "PB11 SDA");
-        Delay_ms(1000);
-    }
-}
-#endif
-
 static void APP_DisplayLine(uint8_t line, const char *text)
 {
 #if APP_USE_TFT
@@ -249,10 +229,6 @@ void APP_Init(void)
 {
     Delay_Init();
     OLED_Init();
-
-#if APP_OLED_SELF_TEST
-    APP_RunOledSelfTest();
-#endif
 
     OLED_Clear();
     OLED_EntireDisplayOn(1U);

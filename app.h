@@ -7,9 +7,10 @@
 #define APP_USE_TFT 0U
 #endif
 
-#ifndef APP_OLED_SELF_TEST
-#define APP_OLED_SELF_TEST 0U
+#ifdef APP_OLED_SELF_TEST
+#undef APP_OLED_SELF_TEST
 #endif
+#define APP_OLED_SELF_TEST 0U
 
 #ifndef APP_SAFE_DISPLAY_ONLY
 #define APP_SAFE_DISPLAY_ONLY 0U
