@@ -4,6 +4,7 @@
 
 #define FREQ_GPIO_PORT             GPIOA
 #define FREQ_GPIO_PIN              6U
+#define FREQ_GPIO_MASK             (1U << FREQ_GPIO_PIN)
 #define FREQ_TIMER                 TIM3
 #define FREQ_TIMER_TICK_HZ         1000000UL
 #define FREQ_TIMEOUT_US            1000000UL
@@ -44,7 +45,8 @@ void BSP_Freq_Init(void)
     RCC->APB2ENR |= RCC_APB2ENR_IOPAEN;
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
 
-    BSP_GPIO_ConfigPin(FREQ_GPIO_PORT, FREQ_GPIO_PIN, BSP_GPIO_FLOATING_INPUT);
+    BSP_GPIO_ConfigPin(FREQ_GPIO_PORT, FREQ_GPIO_PIN, BSP_GPIO_PULL_INPUT);
+    FREQ_GPIO_PORT->ODR &= (uint16_t)~FREQ_GPIO_MASK;
 
     timer_clock = BSP_Freq_GetTimerClock();
     prescaler = timer_clock / FREQ_TIMER_TICK_HZ;
@@ -62,16 +64,17 @@ void BSP_Freq_Init(void)
     FREQ_TIMER->CCER &= ~(TIM_CCER_CC1P | TIM_CCER_CC1NP);
     FREQ_TIMER->CCER |= TIM_CCER_CC1E;
 
-    FREQ_TIMER->SR = 0U;
-    FREQ_TIMER->DIER |= TIM_DIER_UIE | TIM_DIER_CC1IE;
-
-    NVIC_SetPriority(TIM3_IRQn, 1U);
-    NVIC_EnableIRQ(TIM3_IRQn);
-
     s_freq_overflow_count = 0UL;
     s_freq_last_capture_time = 0UL;
     s_freq_millihz = 0UL;
     s_freq_have_capture = 0U;
+
+    FREQ_TIMER->SR = 0U;
+    FREQ_TIMER->DIER = TIM_DIER_UIE | TIM_DIER_CC1IE;
+
+    NVIC_ClearPendingIRQ(TIM3_IRQn);
+    NVIC_SetPriority(TIM3_IRQn, 1U);
+    NVIC_EnableIRQ(TIM3_IRQn);
 
     FREQ_TIMER->CR1 |= TIM_CR1_CEN;
 }
