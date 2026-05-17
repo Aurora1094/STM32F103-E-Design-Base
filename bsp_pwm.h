@@ -13,7 +13,9 @@ void BSP_PWM_Start(void);
 void BSP_PWM_Stop(void);
 void BSP_PWM_SetFrequency(uint32_t freq_hz);
 void BSP_PWM_SetDutyPermille(uint16_t duty_permille);
+void BSP_PWM_SetAmplitudePermille(uint16_t duty_permille);
 uint32_t BSP_PWM_GetFrequency(void);
 uint16_t BSP_PWM_GetDutyPermille(void);
+uint16_t BSP_PWM_GetAmplitudePermille(void);
 
 #endif
