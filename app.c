@@ -21,15 +21,15 @@
 #define APP_VPP_MAX_V          10U
 #define APP_VPP_DEFAULT_V      3U
 #define APP_VPP_STEP_V         1U
-#define APP_WAVE_DUTY_FIXED    500U
-#define APP_AMP_MAX_DUTY       1000U
-#define APP_AMP_DEFAULT_DUTY   ((uint16_t)(((uint32_t)APP_VPP_DEFAULT_V * APP_AMP_MAX_DUTY) / APP_VPP_MAX_V))
+#define APP_OFFSET_DUTY_FIXED  500U
+#define APP_AMP_MAX_PERMILLE   1000U
+#define APP_AMP_DEFAULT        ((uint16_t)(((uint32_t)APP_VPP_DEFAULT_V * APP_AMP_MAX_PERMILLE) / APP_VPP_MAX_V))
 #define APP_ADC_SAMPLE_COUNT   80U
 #define APP_TFT_TEXT_Y_OFFSET  4U
 
 static uint8_t s_selected_item = APP_SELECT_FREQ;
 static uint32_t s_pwm_freq_hz = BSP_PWM_DEFAULT_FREQ_HZ;
-static uint16_t s_amp_duty_permille = APP_AMP_DEFAULT_DUTY;
+static uint16_t s_amp_permille = APP_AMP_DEFAULT;
 static uint8_t s_target_vpp_v = APP_VPP_DEFAULT_V;
 static uint16_t s_key_press_count = 0U;
 static uint16_t s_adc_mv = 0U;
@@ -56,9 +56,9 @@ static uint32_t APP_GetFrequencyStep(void)
     return APP_PWM_FREQ_STEP_HZ;
 }
 
-static uint16_t APP_ConvertVppToDutyPermille(uint8_t target_vpp_v)
+static uint16_t APP_ConvertVppToAmplitudePermille(uint8_t target_vpp_v)
 {
-    uint32_t duty_permille;
+    uint32_t amplitude_permille;
 
     if (target_vpp_v < APP_VPP_MIN_V) {
         target_vpp_v = APP_VPP_MIN_V;
@@ -66,20 +66,20 @@ static uint16_t APP_ConvertVppToDutyPermille(uint8_t target_vpp_v)
         target_vpp_v = APP_VPP_MAX_V;
     }
 
-    duty_permille = ((uint32_t)target_vpp_v * APP_AMP_MAX_DUTY) / APP_VPP_MAX_V;
-    if (duty_permille > APP_AMP_MAX_DUTY) {
-        duty_permille = APP_AMP_MAX_DUTY;
+    amplitude_permille = ((uint32_t)target_vpp_v * APP_AMP_MAX_PERMILLE) / APP_VPP_MAX_V;
+    if (amplitude_permille > APP_AMP_MAX_PERMILLE) {
+        amplitude_permille = APP_AMP_MAX_PERMILLE;
     }
 
-    return (uint16_t)duty_permille;
+    return (uint16_t)amplitude_permille;
 }
 
 static void APP_ApplyTargetVpp(void)
 {
-    s_amp_duty_permille = APP_ConvertVppToDutyPermille(s_target_vpp_v);
+    s_amp_permille = APP_ConvertVppToAmplitudePermille(s_target_vpp_v);
 
 #if !APP_SAFE_DISPLAY_ONLY
-    BSP_PWM_SetAmplitudePermille(s_amp_duty_permille);
+    BSP_PWM_SetAmplitudePermille(s_amp_permille);
 #endif
 }
 
@@ -233,7 +233,7 @@ static void APP_ShowRuntimeInfo(void)
     sprintf(line, "FSET %luHZ", (unsigned long)s_pwm_freq_hz);
     APP_DisplayLine(3U, line);
 
-    duty_percent = (uint16_t)((s_amp_duty_permille + 5U) / 10U);
+    duty_percent = (uint16_t)((s_amp_permille + 5U) / 10U);
     sprintf(line, "USET %02uV A%03u%%", (unsigned int)s_target_vpp_v, (unsigned int)duty_percent);
     APP_DisplayLine(4U, line);
 
@@ -281,7 +281,7 @@ void APP_Init(void)
     BSP_ADC_Init();
     OLED_ShowString(0U, 3U, "PWM INIT");
     BSP_PWM_Init();
-    BSP_PWM_SetDutyPermille(APP_WAVE_DUTY_FIXED);
+    BSP_PWM_SetDutyPermille(APP_OFFSET_DUTY_FIXED);
     APP_ApplyTargetVpp();
     OLED_ShowString(0U, 4U, "FREQ INIT");
     BSP_Freq_Init();
