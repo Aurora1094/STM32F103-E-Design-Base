@@ -36,8 +36,8 @@ static void BSP_PWM_ApplyDuty(void)
     period_ticks = (uint32_t)s_pwm_arr + 1UL;
     compare = (period_ticks * (uint32_t)s_pwm_duty_permille) / 1000UL;
 
-    if (compare > (uint32_t)s_pwm_arr) {
-        compare = (uint32_t)s_pwm_arr;
+    if (compare > 65535UL) {
+        compare = 65535UL;
     }
 
     PWM_TIMER->CCR3 = (uint16_t)compare;
@@ -124,6 +124,7 @@ void BSP_PWM_SetDutyPermille(uint16_t duty_permille)
 
     s_pwm_duty_permille = duty_permille;
     BSP_PWM_ApplyDuty();
+    PWM_TIMER->EGR = TIM_EGR_UG;
 }
 
 uint32_t BSP_PWM_GetFrequency(void)
